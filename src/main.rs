@@ -30,6 +30,7 @@ impl<T: Copy + Debug> Debug for Node<T> {
 
 impl<T: Copy + Debug> Node<T> {
     fn new(value: T) -> Node<T> {
+        increment_node_count();
         Node {
             position: 0,
             value:    value,
@@ -73,6 +74,26 @@ impl<T: Copy + Debug> Node<T> {
             }
         }
     }
+}
+
+impl<T: Copy + Debug> Drop for Node<T> {
+    fn drop(&mut self) {
+        decrement_node_count();
+    }
+}
+
+thread_local!(static NODE_COUNT: RefCell<usize> = RefCell::new(0));
+
+fn increment_node_count() {
+    NODE_COUNT.with(|c| { *c.borrow_mut() += 1; });
+}
+
+fn decrement_node_count() {
+    NODE_COUNT.with(|c| { *c.borrow_mut() -= 1; });
+}
+
+fn get_node_count() -> usize {
+    NODE_COUNT.with(|c| { *c.borrow() })
 }
 
 impl<T: Copy + Debug> Debug for LinkedList<T> {
@@ -308,5 +329,28 @@ mod test {
         let (result, it) = list._at(999, &head, 0);
         assert!(it < 999);
         assert_eq!(result.unwrap(), 999);
+    }
+
+    use super::get_node_count;
+
+    #[test]
+    fn nodes_should_not_leak() {
+        let count_before = get_node_count();
+        {
+            // Put 7 integers into a list.
+            let mut list = LinkedList::new();
+            for i in (0 .. 7) {
+                list.append(i);
+            }
+
+            println!("trying first assertion:");
+            assert_eq!(get_node_count(), count_before + 7);
+            println!("first assertion passed");
+        } // `list` goes out of scope. Ideally we would drop all nodes at this point.
+
+        // This assertion fails: no Nodes were dropped.
+        println!("trying second assertion:");
+        assert_eq!(get_node_count(), count_before);
+        println!("second assertion passed");
     }
 }
